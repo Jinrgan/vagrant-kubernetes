@@ -1,0 +1,72 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.require_version ">= 1.6.0"
+
+NUM_WORKER_NODES=2
+IP_NW="192.168.0."
+IP_START=203
+
+boxes = [
+  {
+    :name => "k8s-master",
+    :eth1 => "192.168.0.203",
+    :mem => "4096",
+    :cpu => "2" # at least 2
+  },
+  {
+    :name => "k8s-node1",
+    :eth1 => "192.168.0.204",
+    :mem => "4096",
+    :cpu => "2"
+  },
+  {
+    :name => "k8s-node2",
+    :eth1 => "192.168.0.205",
+    :mem => "4096",
+    :cpu => "2"
+  }
+]
+
+Vagrant.configure(2) do |config|
+  if Vagrant.has_plugin?("vagrant-vbguest")
+    config.vbguest.auto_update = false
+  end
+
+  config.vm.provision "shell", env: {"IP_NW" => IP_NW, "IP_START" => IP_START}, inline: <<-SHELL
+      apt-get update -y
+      echo "$IP_NW$((IP_START)) master-node" >> /etc/hosts
+      echo "$IP_NW$((IP_START+1)) worker-node01" >> /etc/hosts
+      echo "$IP_NW$((IP_START+2)) worker-node02" >> /etc/hosts
+  SHELL
+  config.vm.box = "centos/7"
+  config.vm.box_url = "https://mirrors.ustc.edu.cn/centos-cloud/centos/7/vagrant/x86_64/images/CentOS-7.box"
+
+  config.vm.define "master" do |master|
+    # master.vm.box = "bento/ubuntu-18.04"
+    master.vm.hostname = "master-node"
+    master.vm.network :public_network, bridge: "em1", ip: IP_NW + "#{IP_START}"
+    master.vm.provider "virtualbox" do |vb|
+        vb.memory = 4096
+        vb.cpus = 2
+    end
+    master.vm.provision "shell", path: "scripts/common.sh"
+    master.vm.provision "shell", path: "scripts/master.sh"
+  end
+  
+  (1..NUM_WORKER_NODES).each do |i|
+
+    config.vm.define "node0#{i}" do |node|
+      node.vm.hostname = "worker-node0#{i}"
+      node.vm.network :public_network, bridge: "em1",, ip: IP_NW + "#{IP_START + i}"
+      node.vm.provider "virtualbox" do |vb|
+          vb.memory = 4096
+          vb.cpus = 2
+      end
+      node.vm.provision "shell", path: "scripts/common.sh"
+      node.vm.provision "shell", path: "scripts/node.sh"
+    end
+  
+  end  
+
+end
